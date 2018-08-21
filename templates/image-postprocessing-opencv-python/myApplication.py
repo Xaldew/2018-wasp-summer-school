@@ -27,6 +27,13 @@ import OD4Session
 import opendlv_standard_message_set_v0_9_6_pb2
 
 ################################################################################
+# Turning on/off stuff
+
+debug = False
+longitudinal_control_enabled = False
+lateral_control_enabled = False
+
+################################################################################
 # Filter the measured distance and calculate derivative.
 filterK = 0.3
 filterKD = 0.3
@@ -60,9 +67,10 @@ def create_timestamp(seconds, microseconds):
 
 # This callback is triggered whenever there is a new distance reading coming in.
 def onDistance(msg, senderStamp, timeStamps):
-    print "Received distance; senderStamp=" + str(senderStamp)
-    print "sent: " + str(timeStamps[0]) + ", received: " + str(timeStamps[1]) + ", sample time stamps: " + str(timeStamps[2])
-    print msg
+    if debug:
+        print "Received distance; senderStamp=" + str(senderStamp)
+        print "sent: " + str(timeStamps[0]) + ", received: " + str(timeStamps[1]) + ", sample time stamps: " + str(timeStamps[2])
+        print msg
 
     if senderStamp == 0:
         filter_input(msg.distance,timeStamps[2])
@@ -71,7 +79,10 @@ def onDistance(msg, senderStamp, timeStamps):
 # Replay mode: CID = 253
 # Live mode: CID = 112
 # TODO: Change to CID 112 when this program is used on Kiwi.
-session = OD4Session.OD4Session(cid=253)
+if debug:
+    session = OD4Session.OD4Session(cid=253)
+else:
+    session = OD4Session.OD4Session(cid=112)
 # Register a handler for a message; the following example is listening
 # for messageID 1039 which represents opendlv.proxy.DistanceReading.
 # Cf. here: https://github.com/chalmers-revere/opendlv.standard-message-set/blob/master/opendlv.odvd#L113-L115
@@ -141,8 +152,9 @@ while True:
     cv2.rectangle(img, (50, 50), (100, 100), (0,0,255), 2)
 
     # TODO: Disable the following two lines before running on Kiwi:
-    cv2.imshow("image", img);
-    cv2.waitKey(2);
+    if debug:
+        cv2.imshow("image", img);
+        cv2.waitKey(2);
 
     ############################################################################
     # Example for creating and sending a message to other microservices; can
@@ -166,11 +178,13 @@ while True:
     # Be careful!
     set_point = 0.2;
     control = longitudinal_control(set_point, last_distance, last_derivative)
-    print control
+    if debug:
+        print control
     if control < -0.2:
         control = -0.2
     if control > 0.2:
         control = 0.2
     pedalPositionRequest = opendlv_standard_message_set_v0_9_6_pb2.opendlv_proxy_PedalPositionRequest()
     pedalPositionRequest.position = control
-    session.send(1086, pedalPositionRequest.SerializeToString());
+    if longitudinal_control_enabled:
+        session.send(1086, pedalPositionRequest.SerializeToString());
