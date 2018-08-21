@@ -27,11 +27,45 @@ import OD4Session
 import opendlv_standard_message_set_v0_9_6_pb2
 
 ################################################################################
+# Filter the measured distance and calculate derivative.
+filterK = 0.3
+filterKD = 0.3
+last_time = None
+last_distance = -1.0
+last_derivative = -1.0
+filter_init = False
+
+def filter_input(distance, timestamp):
+    global last_time, last_distance, last_derivative, filter_init
+
+    if filter_init:
+        delta_datetime = timestamp - last_time
+        delta_time = create_timestamp(delta_datetime.seconds, delta_datetime.microseconds)
+        filtered_distance = filterK*distance + (1-filterK)*last_distance
+        if delta_time > 0.0:
+            derivative = (filtered_distance-last_distance)/delta_time
+            filtered_derivative = filterKD*derivative + (1-filterKD)*last_derivative
+        else:
+            filtered_derivative = last_derivative
+    else:
+        filtered_distance = distance
+        filtered_derivative = 0.0
+    last_time = timestamp
+    last_distance = filtered_distance
+    last_derivative = filtered_derivative
+    filter_init = True
+
+def create_timestamp(seconds, microseconds):
+    return float(seconds) + float(microseconds)/1000000.0
+
 # This callback is triggered whenever there is a new distance reading coming in.
 def onDistance(msg, senderStamp, timeStamps):
     print "Received distance; senderStamp=" + str(senderStamp)
     print "sent: " + str(timeStamps[0]) + ", received: " + str(timeStamps[1]) + ", sample time stamps: " + str(timeStamps[2])
     print msg
+
+    if senderStamp == 0:
+        filter_input(msg.distance,timeStamps[2])
 
 # Create a session to send and receive messages from a running OD4Session;
 # Replay mode: CID = 253
@@ -58,6 +92,26 @@ keySemCondition = sysv_ipc.ftok(name, 3, True)
 shm = sysv_ipc.SharedMemory(keySharedMemory)
 mutex = sysv_ipc.Semaphore(keySemCondition)
 cond = sysv_ipc.Semaphore(keySemCondition)
+
+################################################################################
+
+def longitudinal_control(set_point, distance, speed):
+    kp = 0.5
+    kd = 0.1
+    p_eps = 0.02
+    d_eps = 0.03
+
+    p_error = distance-set_point
+    d_error = speed
+
+    if p_error > -p_eps and p_error < p_eps:
+        p_error = 0.0
+    if d_error > -d_eps and d_error < d_eps:
+        d_error = 0.0
+
+    control = kp*p_error + kd*d_error
+
+    return control
 
 ################################################################################
 # Main loop to process the next image frame coming in.
@@ -110,7 +164,13 @@ while True:
 
     # Uncomment the following lines to accelerate/decelerate; range: +0.25 (forward) .. -1.0 (backwards).
     # Be careful!
-    #pedalPositionRequest = opendlv_standard_message_set_v0_9_6_pb2.opendlv_proxy_PedalPositionRequest()
-    #pedalPositionRequest.position = 0
-    #session.send(1086, pedalPositionRequest.SerializeToString());
-
+    set_point = 0.2;
+    control = longitudinal_control(set_point, last_distance, last_derivative)
+    print control
+    if control < -0.2:
+        control = -0.2
+    if control > 0.2:
+        control = 0.2
+    pedalPositionRequest = opendlv_standard_message_set_v0_9_6_pb2.opendlv_proxy_PedalPositionRequest()
+    pedalPositionRequest.position = control
+    session.send(1086, pedalPositionRequest.SerializeToString());
