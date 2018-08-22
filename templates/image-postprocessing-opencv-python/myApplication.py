@@ -57,13 +57,13 @@ def img_resize(img, scale=1.0):
 # Turning on/off stuff
 
 debug = False
-longitudinal_control_enabled = False
+longitudinal_control_enabled = True
 lateral_control_enabled = True
 
 ################################################################################
 # Control constants
 reverse_forward_ratio = 2.0
-friction_bias = 0.8
+friction_bias = 0.2
 
 ################################################################################
 # Filter the measured distance and calculate derivative.
@@ -149,8 +149,8 @@ def p_control(p_error):
     return control
 
 def pd_control(p_error, d_error):
-    kp = 0.5
-    kd = 0.1
+    kp = 0.3
+    kd = 0.05
     p_eps = 0.02
     d_eps = 0.03
 
@@ -182,7 +182,7 @@ def longitudinal_control(set_point, distance, speed):
     # control = p_control(p_error)
     # control = pd_control(p_error, d_error)
     # control = sm_control(p_error, d_error)
-    control = p_control(p_error)
+    control = pd_control(p_error, d_error)
 
     if control < 0:
         control = control*reverse_forward_ratio
