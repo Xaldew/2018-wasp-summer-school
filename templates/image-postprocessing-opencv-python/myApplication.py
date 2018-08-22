@@ -39,7 +39,7 @@ filterK = 0.3
 filterKD = 0.3
 last_time = None
 last_distance = -1.0
-last_derivative = -1.0
+last_derivative = 0.0
 filter_init = False
 
 def filter_input(distance, timestamp):
