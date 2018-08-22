@@ -14,6 +14,7 @@ args = vars(ap.parse_args())
 
 greenLower = (34,  40,  40)
 greenUpper = (60, 255, 255)
+FONT = cv2.FONT_HERSHEY_SIMPLEX
 
 pts = deque(maxlen=args["buffer"])
 vs = cv2.VideoCapture(0)
@@ -27,12 +28,12 @@ while True:
     if frame is None:
 	break
  
-    # Resize the frame, blur it, and convert it to the HSV color space
+    # Resize the frame, blur it, and convert it to the HSV color space.
     scale = 0.8
-    h,w,_ = frame.shape
-    width = int(w * scale)
-    height = int(h * scale)
-    frame = cv2.resize(frame, (w, h), interpolation = cv2.INTER_AREA)
+    ih,iw,_ = frame.shape
+    width = int(iw * scale)
+    height = int(ih * scale)
+    frame = cv2.resize(frame, (iw, ih), interpolation = cv2.INTER_AREA)
 
     work = frame
     work = cv2.GaussianBlur(work, (11, 11), 0)
@@ -47,9 +48,9 @@ while True:
     im2, cnts, hierarchy = cv2.findContours(mask.copy(),
                                             cv2.RETR_TREE,
                                             cv2.CHAIN_APPROX_SIMPLE)
-    angle = math.pi / 2
     center = None
     seen = False
+    bw,bh = (0,0)
 
     # Only proceed if at least one contour was found.
     if len(cnts) > 0:
@@ -63,8 +64,8 @@ while True:
         rect = cv2.minAreaRect(c)
         box = cv2.boxPoints(rect)
         box = np.int0(box)
-        w,h = rect[1]
-        area = w * h
+        bw,bh = rect[1]
+        area = bw * bh
 
         if area > 1000:
             cv2.drawContours(frame, [box], 0, (0,0,255), 2)
@@ -81,6 +82,27 @@ while True:
 
     if not seen and pts:
         pts.pop()
+
+    # Compute thrust and steering angles for the latest point.
+    angle  = 0.0
+    thrust = 0.0
+    if pts:
+        cx, cy = pts[0]
+        a = iw/2 - cx
+        b = ih/2
+        angle = math.atan(a / float(b))
+        thrust = 1.0 - (float(bh) / b)
+
+        s = min(max(0.0, thrust), 1.0)
+        nh = ih/2 + (b - b*s)
+        viz = np.array([[iw/2, ih], [cx, nh], [iw/2, nh]], np.int32)
+        cv2.polylines(frame, [viz], True, (255,255,255), thickness=3)
+
+    # Visualize thrust and steering angle.
+    rstr = "Angle: %.2f" % math.degrees(angle)
+    cv2.putText(frame, rstr, (10,ih/2), FONT, 0.6, (255,255,255), 1, cv2.LINE_AA)
+    rstr = "Thrust: %.2f" % thrust
+    cv2.putText(frame, rstr, (10,ih/2 + 20), FONT, 0.6, (255,255,255), 1, cv2.LINE_AA)
 
     # Display the frames and tracking data.
     cv2.imshow("Frame", frame)
