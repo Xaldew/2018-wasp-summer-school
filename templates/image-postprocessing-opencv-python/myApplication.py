@@ -323,7 +323,7 @@ while True:
     # Example for creating and sending a message to other microservices; can
     # be removed when not needed.
     angleReading = opendlv_standard_message_set_v0_9_6_pb2.opendlv_proxy_AngleReading()
-    angleReading.angle = 123.45
+    angleReading.angle = angle
 
     # 1038 is the message ID for opendlv.proxy.AngleReading
     session.send(1038, angleReading.SerializeToString());
@@ -332,7 +332,7 @@ while True:
     # Send distance reading from camera to be able to log it better
     # Misuse of altitude reading to get distance in a unique message
     cameraDistance = opendlv_standard_message_set_v0_9_6_pb2.opendlv_proxy_AltitudeReading()
-    cameraDistance.altitude = -1.2345
+    cameraDistance.altitude = thrust
     session.send(1033, cameraDistance.SerializeToString())
 
     ############################################################################
