@@ -62,8 +62,8 @@ lateral_control_enabled = True
 
 ################################################################################
 # Control constants
-reverse_forward_ratio = 2.0
-friction_bias = 0.2
+reverse_forward_ratio = 1.75
+friction_bias = 0.1
 
 ################################################################################
 # Filter the measured distance and calculate derivative.
@@ -343,7 +343,7 @@ while True:
 
     # Uncomment the following lines to accelerate/decelerate; range: +0.25 (forward) .. -1.0 (backwards).
     # Be careful!
-    set_point = 0.2
+    set_point = 0.4
     control = longitudinal_control(set_point, last_distance, last_derivative)
     if debug:
         print control
