@@ -48,9 +48,9 @@ def onDistance(msg, senderStamp, timeStamps):
 
 # Create a session to send and receive messages from a running OD4Session;
 # Replay mode: CID = 253
-# Live mode: CID = 112
-# TODO: Change to CID 112 when this program is used on Kiwi.
-session = OD4Session.OD4Session(cid=253)
+# Live mode: CID = 111
+# TODO: Change to CID 111 when this program is used on Kiwi.
+session = OD4Session.OD4Session(cid=111)
 # Register a handler for a message; the following example is listening
 # for messageID 1039 which represents opendlv.proxy.DistanceReading.
 # Cf. here: https://github.com/chalmers-revere/opendlv.standard-message-set/blob/master/opendlv.odvd#L113-L115
@@ -111,15 +111,6 @@ while True:
     print "Rear = " + str(distances["rear"])
 
     ############################################################################
-    # Example for creating and sending a message to other microservices; can
-    # be removed when not needed.
-    angleReading = opendlv_standard_message_set_v0_9_6_pb2.opendlv_proxy_AngleReading()
-    angleReading.angle = 123.45
-
-    # 1038 is the message ID for opendlv.proxy.AngleReading
-    session.send(1038, angleReading.SerializeToString());
-
-    ############################################################################
     # Steering and acceleration/decelration.
     #
     # Uncomment the following lines to steer; range: +38deg (left) .. -38deg (right).
@@ -133,4 +124,12 @@ while True:
     #pedalPositionRequest = opendlv_standard_message_set_v0_9_6_pb2.opendlv_proxy_PedalPositionRequest()
     #pedalPositionRequest.position = 0
     #session.send(1086, pedalPositionRequest.SerializeToString());
+
+    # Uncomment the following lines to steer; range: +10 (left) .. -10 (right).
+    # Uncomment the following lines to accelerate/decelerate; range: +3.0 (forward) .. -10.0 (deceleration).
+    actuationRequest = opendlv_standard_message_set_v0_9_6_pb2.opendlv_proxy_ActuationRequest()
+    actuationRequest.acceleration = 0
+    actuationRequest.steering = 0
+    actuationRequest.isValid = True
+    #session.send(160, actuationRequest.SerializeToString());
 
