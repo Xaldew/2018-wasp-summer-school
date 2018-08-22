@@ -34,6 +34,11 @@ longitudinal_control_enabled = False
 lateral_control_enabled = False
 
 ################################################################################
+# Control constants
+reverse_forward_ratio = 2.0
+friction_bias = 0.8
+
+################################################################################
 # Filter the measured distance and calculate derivative.
 filterK = 0.3
 filterKD = 0.3
@@ -106,14 +111,11 @@ cond = sysv_ipc.Semaphore(keySemCondition)
 
 ################################################################################
 
-def longitudinal_control(set_point, distance, speed):
+def pd_control(p_error, d_error):
     kp = 0.5
     kd = 0.1
     p_eps = 0.02
     d_eps = 0.03
-
-    p_error = distance-set_point
-    d_error = speed
 
     if p_error > -p_eps and p_error < p_eps:
         p_error = 0.0
@@ -122,6 +124,29 @@ def longitudinal_control(set_point, distance, speed):
 
     control = kp*p_error + kd*d_error
 
+    if numpy.abs(control) > 0.03:
+        control = control + numpy.sign(control)*friction_bias
+
+    return control
+
+def sm_control(p_error, d_error):
+    mju = 0.13
+    alpha = 0.05
+    beta = 0.25
+
+    control = mju*numpy.sign(alpha*p_error + beta*d_error) + alpha*d_error
+
+    return control
+
+def longitudinal_control(set_point, distance, speed):
+    p_error = distance-set_point
+    d_error = speed
+
+    control = sm_control(p_error, d_error)
+
+    if control < 0:
+        control = control*reverse_forward_ratio
+
     return control
 
 ################################################################################
@@ -129,7 +154,8 @@ def longitudinal_control(set_point, distance, speed):
 while True:
     # Wait for next notification.
     cond.Z()
-    print "Received new frame."
+    if debug:
+        print "Received new frame."
 
     # Lock access to shared memory.
     mutex.acquire()
@@ -187,8 +213,8 @@ while True:
     control = longitudinal_control(set_point, last_distance, last_derivative)
     if debug:
         print control
-    if control < -0.2:
-        control = -0.2
+    if control < -0.8:
+        control = -0.8
     if control > 0.2:
         control = 0.2
     pedalPositionRequest = opendlv_standard_message_set_v0_9_6_pb2.opendlv_proxy_PedalPositionRequest()
