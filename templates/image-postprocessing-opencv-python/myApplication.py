@@ -19,12 +19,37 @@
 # sysv_ipc is needed to access the shared memory where the camera image is present.
 import sysv_ipc
 # numpy and cv2 are needed to access, modify, or display the pixels
+import math
 import numpy
+import numpy as np
 import cv2
 # OD4Session is needed to send and receive messages
 import OD4Session
 # Import the OpenDLV Standard Message Set.
 import opendlv_standard_message_set_v0_9_6_pb2
+import collections
+
+
+LGREEN = (34,  40,  40)
+UGREEN = (60, 255, 255)
+FONT = cv2.FONT_HERSHEY_SIMPLEX
+BUFSZ = 32
+MIN_AREA = 500
+
+ANGLE_MAX = 38
+ANGLE_DEADBAND = 5
+
+pts = collections.deque(maxlen=BUFSZ)
+
+
+def img_resize(img, scale=1.0):
+    # Resize the frame, blur it, and convert it to the HSV color space.
+    scale = 0.8
+    ih,iw,_ = img.shape
+    w = int(iw * scale)
+    h = int(ih * scale)
+    return cv2.resize(img, (w, h), interpolation = cv2.INTER_AREA)
+
 
 ################################################################################
 # Turning on/off stuff
@@ -187,13 +212,90 @@ while True:
     ############################################################################
     # TODO: Add some image processing logic here.
 
-    # The following example is adding a red rectangle and displaying the result.
-    cv2.rectangle(img, (50, 50), (100, 100), (0,0,255), 2)
+    # Resize the frame, blur it, and convert it to the HSV color space.
+    scale = 0.5
+    ih,iw,_ = img.shape
+    # iw = int(iw * scale)
+    # ih = int(ih * scale)
+    # img = cv2.resize(img, (iw, ih), interpolation = cv2.INTER_AREA)
+
+    work = img
+    work = cv2.GaussianBlur(work, (11, 11), 0)
+    hsv = cv2.cvtColor(work, cv2.COLOR_BGR2HSV)
+
+    # Filter based on our color and remove noise.
+    mask = cv2.inRange(hsv, LGREEN, UGREEN)
+    mask = cv2.erode(mask, None, iterations=2)
+    mask = cv2.dilate(mask, None, iterations=2)
+
+    # Find contours in the mask.
+    im2, cnts, hierarchy = cv2.findContours(mask.copy(),
+                                            cv2.RETR_TREE,
+                                            cv2.CHAIN_APPROX_SIMPLE)
+    center = None
+    seen = False
+    bw,bh = (0,0)
+
+    # Only proceed if at least one contour was found.
+    if len(cnts) > 0:
+
+	# find the largest contour in the mask, then use it to compute the
+	# minimum enclosing circle and centroid
+        c = max(cnts, key=cv2.contourArea)
+        M = cv2.moments(c)
+        center = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
+
+        rect = cv2.minAreaRect(c)
+        box = cv2.boxPoints(rect)
+        box = np.int0(box)
+        bw,bh = rect[1]
+        area = bw * bh
+
+        if area > MIN_AREA:
+            cv2.drawContours(img, [box], 0, (0,0,255), 2)
+            pts.appendleft(center)
+            seen = True
+
+    # Loop over the set of tracked points
+    for i in range(1, len(pts)):
+        if pts[i - 1] is None or pts[i] is None:
+            continue
+
+        thickness = int(np.sqrt(BUFSZ / float(i + 1)) * 2.5)
+        cv2.line(img, pts[i - 1], pts[i], (0, 0, 255), thickness)
+
+    if not seen and pts:
+        pts.pop()
+
+    # Compute thrust and steering angles for the latest point.
+    angle  = 0.0
+    thrust = 0.0
+    if pts:
+        cx, cy = pts[0]
+        a = iw/2 - cx
+        b = ih/2
+        sa = math.degrees(math.atan(a / float(b)))
+        if sa < ANGLE_DEADBAND and sa > -ANGLE_DEADBAND:
+            sa = 0.0
+        angle = min(max(sa, -ANGLE_MAX), ANGLE_MAX)
+
+        thrust = 1.0 - (float(bh) / (b / 2))
+        scale = min(max(0.0, thrust), 1.0)
+        nh = ih/2 + (b - b*scale)
+        viz = np.array([[iw/2, ih], [cx, nh], [iw/2, nh]], np.int32)
+        cv2.polylines(img, [viz], True, (255,255,255), thickness=3)
+
+    # Visualize thrust and steering angle.
+    rstr = "Angle: %.2f" % angle
+    cv2.putText(img, rstr, (10,ih/2), FONT, 0.6, (255,255,255), 1, cv2.LINE_AA)
+    rstr = "Thrust: %.2f" % thrust
+    cv2.putText(img, rstr, (10,ih/2 + 20), FONT, 0.6, (255,255,255), 1, cv2.LINE_AA)
 
     # TODO: Disable the following two lines before running on Kiwi:
     if debug:
-        cv2.imshow("image", img);
-        cv2.waitKey(2);
+        cv2.imshow("Image", img)
+        cv2.imshow("Mask", mask)
+        cv2.waitKey(2)
 
     ############################################################################
     # Example for creating and sending a message to other microservices; can
