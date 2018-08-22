@@ -111,6 +111,16 @@ cond = sysv_ipc.Semaphore(keySemCondition)
 
 ################################################################################
 
+def p_control(p_error):
+    kp = 0.5
+
+    control = kp*p_error
+
+    if numpy.abs(control) > 0.03:
+        control = control + numpy.sign(control)*friction_bias
+
+    return control
+
 def pd_control(p_error, d_error):
     kp = 0.5
     kd = 0.1
@@ -142,7 +152,10 @@ def longitudinal_control(set_point, distance, speed):
     p_error = distance-set_point
     d_error = speed
 
-    control = sm_control(p_error, d_error)
+    # control = p_control(p_error)
+    # control = pd_control(p_error, d_error)
+    # control = sm_control(p_error, d_error)
+    control = p_control(p_error)
 
     if control < 0:
         control = control*reverse_forward_ratio
