@@ -166,6 +166,13 @@ while True:
     session.send(1038, angleReading.SerializeToString());
 
     ############################################################################
+    # Send distance reading from camera to be able to log it better
+    # Misuse of altitude reading to get distance in a unique message
+    cameraDistance = opendlv_standard_message_set_v0_9_6_pb2.opendlv_proxy_AltitudeReading()
+    cameraDistance.altitude = -1.2345
+    session.send(1033, cameraDistance.SerializeToString())
+
+    ############################################################################
     # Steering and acceleration/decelration.
     #
     # Uncomment the following lines to steer; range: +38deg (left) .. -38deg (right).
@@ -176,7 +183,7 @@ while True:
 
     # Uncomment the following lines to accelerate/decelerate; range: +0.25 (forward) .. -1.0 (backwards).
     # Be careful!
-    set_point = 0.2;
+    set_point = 0.2
     control = longitudinal_control(set_point, last_distance, last_derivative)
     if debug:
         print control
