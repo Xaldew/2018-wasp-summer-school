@@ -36,7 +36,7 @@ import collections
 LGREEN = (30,  40,  40)
 UGREEN = (70, 255, 255)
 FONT = cv2.FONT_HERSHEY_SIMPLEX
-BUFSZ = 32
+BUFSZ = 64
 MIN_AREA = 500
 
 ANGLE_MAX = 37.5
@@ -339,14 +339,15 @@ while True:
         distance = interp1(x_values, y_values, thrust)
         filter_input(distance,timestamp)
 
-    # Visualize thrust and steering angle.
-    rstr = "Angle: %.2f" % angle
-    cv2.putText(img, rstr, (10,ih/2), FONT, 0.6, (255,255,255), 1, cv2.LINE_AA)
-    rstr = "Thrust: %.2f" % thrust
-    cv2.putText(img, rstr, (10,ih/2 + 20), FONT, 0.6, (255,255,255), 1, cv2.LINE_AA)
-
     # TODO: Disable the following two lines before running on Kiwi:
     if debug:
+
+        # Visualize thrust and steering angle.
+        rstr = "Angle: %.2f" % angle
+        cv2.putText(img, rstr, (10,ih/2), FONT, 0.6, (255,255,255), 1, cv2.LINE_AA)
+        rstr = "Thrust: %.2f" % thrust
+        cv2.putText(img, rstr, (10,ih/2 + 20), FONT, 0.6, (255,255,255), 1, cv2.LINE_AA)
+
         cv2.imshow("Image", img)
         cv2.imshow("Mask", mask)
         cv2.waitKey(2)
