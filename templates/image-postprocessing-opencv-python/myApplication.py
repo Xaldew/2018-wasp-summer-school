@@ -23,6 +23,8 @@ import math
 import numpy
 import numpy as np
 import cv2
+import atexit
+
 # OD4Session is needed to send and receive messages
 import OD4Session
 # Import the OpenDLV Standard Message Set.
@@ -30,14 +32,14 @@ import opendlv_standard_message_set_v0_9_6_pb2
 import collections
 
 
-LGREEN = (34,  40,  40)
-UGREEN = (60, 255, 255)
+LGREEN = (30,  40,  40)
+UGREEN = (70, 255, 255)
 FONT = cv2.FONT_HERSHEY_SIMPLEX
 BUFSZ = 32
 MIN_AREA = 500
 
-ANGLE_MAX = 38
-ANGLE_DEADBAND = 5
+ANGLE_MAX = 37.5
+ANGLE_DEADBAND = 1.5
 
 pts = collections.deque(maxlen=BUFSZ)
 
@@ -56,7 +58,7 @@ def img_resize(img, scale=1.0):
 
 debug = False
 longitudinal_control_enabled = False
-lateral_control_enabled = False
+lateral_control_enabled = True
 
 ################################################################################
 # Control constants
@@ -186,6 +188,26 @@ def longitudinal_control(set_point, distance, speed):
         control = control*reverse_forward_ratio
 
     return control
+
+
+def clear_controls():
+    send_controls(0, 0)
+
+def send_controls(angle, thrust):
+    groundSteeringRequest = opendlv_standard_message_set_v0_9_6_pb2.opendlv_proxy_GroundSteeringRequest()
+    groundSteeringRequest.groundSteering = math.radians(angle)
+    if lateral_control_enabled:
+        if debug:
+            print "Steering: %.1f" % angle
+        session.send(1090, groundSteeringRequest.SerializeToString());
+
+    pedalPositionRequest = opendlv_standard_message_set_v0_9_6_pb2.opendlv_proxy_PedalPositionRequest()
+    pedalPositionRequest.position = thrust
+    if longitudinal_control_enabled:
+        session.send(1086, pedalPositionRequest.SerializeToString());
+
+
+atexit.register(clear_controls)
 
 ################################################################################
 # Main loop to process the next image frame coming in.
@@ -318,9 +340,6 @@ while True:
     #
     # Uncomment the following lines to steer; range: +38deg (left) .. -38deg (right).
     # Value groundSteeringRequest.groundSteering must be given in radians (DEG/180. * PI).
-    #groundSteeringRequest = opendlv_standard_message_set_v0_9_6_pb2.opendlv_proxy_GroundSteeringRequest()
-    #groundSteeringRequest.groundSteering = 0
-    #session.send(1090, groundSteeringRequest.SerializeToString());
 
     # Uncomment the following lines to accelerate/decelerate; range: +0.25 (forward) .. -1.0 (backwards).
     # Be careful!
@@ -332,7 +351,5 @@ while True:
         control = -0.8
     if control > 0.2:
         control = 0.2
-    pedalPositionRequest = opendlv_standard_message_set_v0_9_6_pb2.opendlv_proxy_PedalPositionRequest()
-    pedalPositionRequest.position = control
-    if longitudinal_control_enabled:
-        session.send(1086, pedalPositionRequest.SerializeToString());
+
+    send_controls(angle, control)
