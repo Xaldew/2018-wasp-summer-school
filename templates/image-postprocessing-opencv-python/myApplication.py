@@ -100,18 +100,17 @@ def filter_input(distance, timestamp):
     global last_time, last_distance, last_derivative, filter_init
 
     if filter_init:
-        if numpy.abs(distance - last_distance) < 0.4:
-            delta_datetime = timestamp - last_time
-            delta_time = create_timestamp(delta_datetime.seconds, delta_datetime.microseconds)
-            filtered_distance = filterK*distance + (1-filterK)*last_distance
-            if delta_time > 0.0:
-                derivative = (filtered_distance-last_distance)/delta_time
-                filtered_derivative = filterKD*derivative + (1-filterKD)*last_derivative
-            else:
-                filtered_derivative = last_derivative
-            last_time = timestamp
-            last_distance = filtered_distance
-            last_derivative = filtered_derivative
+        delta_datetime = timestamp - last_time
+        delta_time = create_timestamp(delta_datetime.seconds, delta_datetime.microseconds)
+        filtered_distance = filterK*distance + (1-filterK)*last_distance
+        if delta_time > 0.0:
+            derivative = (filtered_distance-last_distance)/delta_time
+            filtered_derivative = filterKD*derivative + (1-filterKD)*last_derivative
+        else:
+            filtered_derivative = last_derivative
+        last_time = timestamp
+        last_distance = filtered_distance
+        last_derivative = filtered_derivative
     else:
         filter_init = True
         last_time = timestamp
