@@ -23,6 +23,7 @@ import math
 import numpy
 import numpy as np
 import cv2
+import datetime
 import atexit
 
 # OD4Session is needed to send and receive messages
@@ -66,6 +67,27 @@ reverse_forward_ratio = 1.75
 friction_bias = 0.1
 
 ################################################################################
+# Map the camera distance estimate into meters
+x_values = numpy.array([-0.25, 0.2417, 0.5, 0.7333])
+y_values = numpy.array([0.13, 0.28, 0.5214, 0.9355])
+
+def interp1(x, y, xq):
+    if xq < x[0]:
+        yq = _interp(x[0],x[1],y[0],y[1],xq)
+    elif xq > x[-1]:
+        yq = _interp(x[-2],x[-1],y[-2],y[-1],xq)
+    else:
+        for i in range(1,len(x)):
+            yq = _interp(x[i-1],x[i],y[i-1],y[i],xq)
+            if xq < x[i]:
+                break
+    return yq
+
+def _interp(x1, x2, y1, y2, xq):
+    yq = (y2-y1)/(x2-x1)*(xq-x1) + y1
+    return yq
+
+################################################################################
 # Filter the measured distance and calculate derivative.
 filterK = 0.3
 filterKD = 0.3
@@ -78,21 +100,23 @@ def filter_input(distance, timestamp):
     global last_time, last_distance, last_derivative, filter_init
 
     if filter_init:
-        delta_datetime = timestamp - last_time
-        delta_time = create_timestamp(delta_datetime.seconds, delta_datetime.microseconds)
-        filtered_distance = filterK*distance + (1-filterK)*last_distance
-        if delta_time > 0.0:
-            derivative = (filtered_distance-last_distance)/delta_time
-            filtered_derivative = filterKD*derivative + (1-filterKD)*last_derivative
-        else:
-            filtered_derivative = last_derivative
+        if numpy.abs(distance - last_distance) < 0.4:
+            delta_datetime = timestamp - last_time
+            delta_time = create_timestamp(delta_datetime.seconds, delta_datetime.microseconds)
+            filtered_distance = filterK*distance + (1-filterK)*last_distance
+            if delta_time > 0.0:
+                derivative = (filtered_distance-last_distance)/delta_time
+                filtered_derivative = filterKD*derivative + (1-filterKD)*last_derivative
+            else:
+                filtered_derivative = last_derivative
+            last_time = timestamp
+            last_distance = filtered_distance
+            last_derivative = filtered_derivative
     else:
-        filtered_distance = distance
-        filtered_derivative = 0.0
-    last_time = timestamp
-    last_distance = filtered_distance
-    last_derivative = filtered_derivative
-    filter_init = True
+        filter_init = True
+        last_time = timestamp
+        last_distance = distance
+        last_derivative = 0.0
 
 def create_timestamp(seconds, microseconds):
     return float(seconds) + float(microseconds)/1000000.0
@@ -104,8 +128,12 @@ def onDistance(msg, senderStamp, timeStamps):
         print "sent: " + str(timeStamps[0]) + ", received: " + str(timeStamps[1]) + ", sample time stamps: " + str(timeStamps[2])
         print msg
 
-    if senderStamp == 0:
-        filter_input(msg.distance,timeStamps[2])
+    # Only care about forward distance.
+    # US sensor seem to report a max of slightly more than 1.5 m if no target
+    # is seen.
+    if senderStamp == 0 and msg.distance < 1.5:
+        timestamp = datetime.datetime.now()
+        filter_input(msg.distance,timestamp)
 
 # Create a session to send and receive messages from a running OD4Session;
 # Replay mode: CID = 253
@@ -306,6 +334,11 @@ while True:
         nh = ih/2 + (b - b*scale)
         viz = np.array([[iw/2, ih], [cx, nh], [iw/2, nh]], np.int32)
         cv2.polylines(img, [viz], True, (255,255,255), thickness=3)
+
+        # Map the distance estimate from camera to meters and send to filter.
+        timestamp = datetime.datetime.now()
+        distance = interp1(x_values, y_values, thrust)
+        filter_input(distance,timestamp)
 
     # Visualize thrust and steering angle.
     rstr = "Angle: %.2f" % angle
