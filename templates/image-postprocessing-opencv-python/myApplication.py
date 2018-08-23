@@ -33,8 +33,8 @@ import opendlv_standard_message_set_v0_9_6_pb2
 import collections
 
 
-LGREEN = (30,  40,  40)
-UGREEN = (70, 255, 255)
+LGREEN = (33,  40, 160)
+UGREEN = (45, 255, 240)
 FONT = cv2.FONT_HERSHEY_SIMPLEX
 BUFSZ = 64
 MIN_AREA = 500
@@ -95,6 +95,7 @@ last_time = None
 last_distance = -1.0
 last_derivative = 0.0
 filter_init = False
+ultras = 2.0
 
 def filter_input(distance, timestamp):
     global last_time, last_distance, last_derivative, filter_init
@@ -122,6 +123,8 @@ def create_timestamp(seconds, microseconds):
 
 # This callback is triggered whenever there is a new distance reading coming in.
 def onDistance(msg, senderStamp, timeStamps):
+    global ultras
+
     if debug:
         print "Received distance; senderStamp=" + str(senderStamp)
         print "sent: " + str(timeStamps[0]) + ", received: " + str(timeStamps[1]) + ", sample time stamps: " + str(timeStamps[2])
@@ -133,6 +136,7 @@ def onDistance(msg, senderStamp, timeStamps):
     if senderStamp == 0 and msg.distance < 1.5:
         timestamp = datetime.datetime.now()
         filter_input(msg.distance,timestamp)
+        ultras = msg.distance
 
 # Create a session to send and receive messages from a running OD4Session;
 # Replay mode: CID = 253
@@ -218,9 +222,9 @@ def longitudinal_control(set_point, distance, speed):
 
 
 def clear_controls():
-    send_controls(0, 0)
+    send_controls(0, 0, us=0.0, seen=False, throttle=0.0)
 
-def send_controls(angle, thrust):
+def send_controls(angle, control, us=0.0, seen=False, throttle=0.0):
     groundSteeringRequest = opendlv_standard_message_set_v0_9_6_pb2.opendlv_proxy_GroundSteeringRequest()
     groundSteeringRequest.groundSteering = math.radians(angle)
     if lateral_control_enabled:
@@ -229,8 +233,9 @@ def send_controls(angle, thrust):
         session.send(1090, groundSteeringRequest.SerializeToString());
 
     pedalPositionRequest = opendlv_standard_message_set_v0_9_6_pb2.opendlv_proxy_PedalPositionRequest()
-    pedalPositionRequest.position = thrust
-    if longitudinal_control_enabled:
+    pedalPositionRequest.position = us
+
+    if longitudinal_control_enabled and (seen or us < 1.4):
         session.send(1086, pedalPositionRequest.SerializeToString());
 
 
@@ -299,8 +304,9 @@ while True:
         box = np.int0(box)
         bw,bh = rect[1]
         area = bw * bh
+        ar = bw / float(bh)
 
-        if area > MIN_AREA:
+        if area > MIN_AREA and (ar > 0.85 and ar < 1.15):
             cv2.drawContours(img, [box], 0, (0,0,255), 2)
             pts.appendleft(center)
             seen = True
@@ -316,9 +322,9 @@ while True:
     if not seen and pts:
         pts.pop()
 
-    # Compute thrust and steering angles for the latest point.
+    # Compute Throttle and steering angles for the latest point.
     angle  = 0.0
-    thrust = 0.0
+    throttle = 0.0
     if pts:
         cx, cy = pts[0]
         a = iw/2 - cx
@@ -328,24 +334,24 @@ while True:
             sa = 0.0
         angle = min(max(sa, -ANGLE_MAX), ANGLE_MAX)
 
-        thrust = 1.0 - (float(bh) / (b / 2))
-        scale = min(max(0.0, thrust), 1.0)
+        throttle = 1.0 - (float(bh) / (b / 2))
+        scale = min(max(0.0, throttle), 1.0)
         nh = ih/2 + (b - b*scale)
         viz = np.array([[iw/2, ih], [cx, nh], [iw/2, nh]], np.int32)
         cv2.polylines(img, [viz], True, (255,255,255), thickness=3)
 
         # Map the distance estimate from camera to meters and send to filter.
         timestamp = datetime.datetime.now()
-        distance = interp1(x_values, y_values, thrust)
+        distance = interp1(x_values, y_values, throttle)
         filter_input(distance,timestamp)
 
     # TODO: Disable the following two lines before running on Kiwi:
     if debug:
 
-        # Visualize thrust and steering angle.
+        # Visualize throttle and steering angle.
         rstr = "Angle: %.2f" % angle
         cv2.putText(img, rstr, (10,ih/2), FONT, 0.6, (255,255,255), 1, cv2.LINE_AA)
-        rstr = "Thrust: %.2f" % thrust
+        rstr = "Throttle: %.2f" % throttle
         cv2.putText(img, rstr, (10,ih/2 + 20), FONT, 0.6, (255,255,255), 1, cv2.LINE_AA)
 
         cv2.imshow("Image", img)
@@ -365,7 +371,7 @@ while True:
     # Send distance reading from camera to be able to log it better
     # Misuse of altitude reading to get distance in a unique message
     cameraDistance = opendlv_standard_message_set_v0_9_6_pb2.opendlv_proxy_AltitudeReading()
-    cameraDistance.altitude = thrust
+    cameraDistance.altitude = throttle
     session.send(1033, cameraDistance.SerializeToString())
 
     ############################################################################
@@ -385,4 +391,4 @@ while True:
     if control > 0.2:
         control = 0.2
 
-    send_controls(angle, control)
+    send_controls(angle, control, ultras, seen, throttle)
